@@ -220,3 +220,132 @@
          :body "Stay for a little while"}))
    ))
 
+(defn create-indexes
+  "Create indexes for system to work"
+  []
+  (when (not (mon/mongodb-index-exists?
+               "user"
+               "username-unique-idx"))
+    (mon/mongodb-create-index
+      "user"
+      {:username 1}
+      "username-unique-idx"
+      true))
+  (when (not (mon/mongodb-index-exists?
+               "user"
+               "email-unique-idx"))
+    (mon/mongodb-create-index
+      "user"
+      {:email 1}
+      "email-unique-idx"
+      true))
+  (when (not (mon/mongodb-index-exists?
+               "session"
+               "short-session-idx"))
+    (mon/mongodb-create-index
+      "session"
+      {:created-at 1}
+      "short-session-idx"
+      false
+      session-timeout-num))
+  (when (not (mon/mongodb-index-exists?
+               "session"
+               "session-uuid-unique-idx"))
+    (mon/mongodb-create-index
+      "session"
+      {:uuid 1}
+      "session-uuid-unique-idx"
+      true))
+  (when (not (mon/mongodb-index-exists?
+               "long-session"
+               "long-session-idx"))
+    (mon/mongodb-create-index
+      "long-session"
+      {:created-at 1}
+      "long-session-idx"
+      false
+      long-session-timeout-num))
+  (when (not (mon/mongodb-index-exists?
+               "long-session"
+               "long-session-uuid-unique-idx"))
+    (mon/mongodb-create-index
+      "long-session"
+      {:uuid 1}
+      "long-session-uuid-unique-idx"
+      true))
+ )
+
+(defn get-pass-for-email-username
+  "Get password for supplied email"
+  [email-username
+   password]
+  (if-let [user-username (mon/mongodb-find-one
+                           "user"
+                           {:username email-username})]
+    (let [db-password (:password user-username)]
+      (if (= db-password
+             password)
+        [{:status   "success"
+          :email    "success"
+          :password "success"}
+         user-username]
+        {:status   "error"
+         :email    "success"
+         :password "error"}))
+    (if-let [user-email (mon/mongodb-find-one
+                          "user"
+                          {:email email-username})]
+      (let [db-password (:password user-email)]
+        (if (= db-password
+               password)
+          [{:status   "success"
+            :email    "success"
+            :password "success"}
+           user-email]
+          {:status   "error"
+           :email    "success"
+           :password "error"}))
+      {:status   "error"
+       :email    "error"
+       :password "error"}))
+ )
+
+(defn login-authentication
+  "Login authentication"
+  [request-body
+   user-agent]
+  (let [email-username (:email request-body)
+        password (:password request-body)
+        remember-me (:remember-me request-body)
+        [result
+         user] (get-pass-for-email-username
+                 email-username
+                 password)]
+    (if (= (:status result)
+           "success")
+      (let [uuid (.toString (java.util.UUID/randomUUID))
+            session-cookie (session-cookie-string-fn
+                             remember-me
+                             user
+                             uuid
+                             user-agent)]
+        (if session-cookie
+          {:status (stc/ok)
+           :headers {(eh/content-type) (mt/text-plain)
+                     (rsh/set-cookie) session-cookie}
+           :body (str result)}
+          {:status (stc/internal-server-error)
+           :headers {(eh/content-type) (mt/text-plain)}
+           :body (str result)})
+       )
+      {:status (stc/unauthorized)
+       :headers {(eh/content-type) (mt/text-plain)}
+       :body (str result)})
+   ))
+
+(defn logout
+  "Logout user from system"
+  [request]
+  (delete-session-record
+    request))
+
