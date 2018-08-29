@@ -35,6 +35,7 @@
   "Format session cookie with name, uuid, exparation datetime and max-age seconds"
   [cookie-name
    user-id
+   username
    session-uuid
    timeout-in-seconds
    user-agent]
@@ -49,6 +50,7 @@
       (let [session-obj {:uuid session-uuid
                          :user-agent user-agent
                          :user-id user-id
+                         :username username
                          :created-at (java.util.Date.)}]
         (mon/mongodb-insert-one
           cookie-name
@@ -117,15 +119,40 @@
    (if-let [uuid (mon/mongodb-find-one
                    "session"
                    {:uuid session-uuid})]
-     {:status (stc/ok)
-      :headers {(eh/content-type) (mt/text-plain)}
-      :body "It's ok"}
+     (if-let [preferences (mon/mongodb-find-one
+                            "preferences"
+                            {:user-id (:user-id uuid)})]
+       {:status (stc/ok)
+        :headers {(eh/content-type) (mt/text-plain)}
+        :body (str
+                {:status "It's ok"
+                 :username (:username uuid)
+                 :language-name (:language-name preferences)})}
+       {:status (stc/ok)
+        :headers {(eh/content-type) (mt/text-plain)}
+        :body (str
+                {:status "It's ok"
+                 :username (:username uuid)
+                 :language-name "English"})})
      (if-let [uuid (mon/mongodb-find-one
                      "long-session"
                      {:uuid session-uuid})]
-       {:status (stc/ok)
-        :headers {(eh/content-type) (mt/text-plain)}
-        :body "It's ok"}
+       (if-let [preferences (mon/mongodb-find-one
+                              "preferences"
+                              {:user-id (:user-id uuid)})]
+         {:status (stc/ok)
+          :headers {(eh/content-type) (mt/text-plain)}
+          :body (str
+                  {:status "It's ok"
+                   :username (:username uuid)
+                   :language-name (:language-name preferences)})}
+         {:status (stc/ok)
+          :headers {(eh/content-type) (mt/text-plain)}
+          :body (str
+                  {:status "It's ok"
+                   :username (:username uuid)
+                   :language-name "English"})}
+        )
        {:status (stc/unauthorized)
         :headers {(eh/content-type) (mt/text-plain)}
         :body "It's not ok"}))
@@ -165,6 +192,7 @@
      (session-cookie-string
        cookie-name
        nil
+       nil
        session-uuid
        timeout-num
        user-agent)])
@@ -180,12 +208,14 @@
     (session-cookie-string
       "long-session"
       (:_id user)
+      (:username user)
       uuid
       long-session-timeout-num
       user-agent)
     (session-cookie-string
       "session"
       (:_id user)
+      (:username user)
       uuid
       session-timeout-num
       user-agent))
@@ -285,29 +315,51 @@
     (let [db-password (:password user-username)]
       (if (= db-password
              password)
-        [{:status   "success"
-          :email    "success"
-          :password "success"}
-         user-username]
-        {:status   "error"
-         :email    "success"
-         :password "error"}))
+        (if-let [preferences (mon/mongodb-find-one
+                               "preferences"
+                               {:user-id (:_id user-username)})]
+          [{:status "success"
+            :email "success"
+            :password "success"
+            :username (:username user-username)
+            :language-name (:language-name preferences)}
+           user-username]
+          [{:status "success"
+            :email "success"
+            :password "success"
+            :username (:username user-username)
+            :language-name "English"}
+           user-username])
+        [{:status "error"
+          :email "success"
+          :password "error"}]))
     (if-let [user-email (mon/mongodb-find-one
                           "user"
                           {:email email-username})]
       (let [db-password (:password user-email)]
         (if (= db-password
                password)
-          [{:status   "success"
-            :email    "success"
-            :password "success"}
-           user-email]
-          {:status   "error"
-           :email    "success"
-           :password "error"}))
-      {:status   "error"
-       :email    "error"
-       :password "error"}))
+          (if-let [preferences (mon/mongodb-find-one
+                                 "preferences"
+                                 {:user-id (:_id email-username)})]
+            [{:status "success"
+              :email "success"
+              :password "success"
+              :username (:username user-email)
+              :language-name (:language-name preferences)}
+             user-email]
+            [{:status "success"
+              :email "success"
+              :password "success"
+              :username (:username user-email)
+              :language-name "English"}
+             user-email])
+          [{:status "error"
+            :email "success"
+            :password "error"}]))
+      [{:status "error"
+        :email "error"
+        :password "error"}]))
  )
 
 (defn login-authentication
