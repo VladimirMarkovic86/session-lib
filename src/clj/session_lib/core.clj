@@ -88,7 +88,7 @@
   "Read cookie from request"
   [cookies
    cookie-name]
-  (if-let [cookies cookies]
+  (when-let [cookies cookies]
     (let [cookies (clojure.string/split cookies #"; ")
           cookies-map (atom {})]
       (doseq [cookie cookies]
@@ -101,8 +101,9 @@
               c-name)
             c-value))
        )
-     (cookie-name
-       @cookies-map))
+     (get
+       @cookies-map
+       cookie-name))
    ))
 
 (defn am-i-logged-in
