@@ -59,14 +59,11 @@
     (str
       cookie-name
       "=" session-uuid "; "
-      "Expires="
-      (session-timeout
-        timeout-in-seconds)
-      "; "
-      "Max-Age=" timeout-in-seconds
-      "; "
-      " Path=/"
-      ;"Domain=localhost:1612; "
+      "Expires=" (session-timeout
+                   timeout-in-seconds) "; "
+      "Max-Age=" timeout-in-seconds "; "
+      "Path=/; "
+      ;"Domain=sample; "
       ;"Secure; "
       ;"HttpOnly"
      )
