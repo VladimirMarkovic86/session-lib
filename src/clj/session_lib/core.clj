@@ -220,7 +220,7 @@
  )
 
 (defn delete-session-record
-  ""
+  "Delete session record from database"
   [request]
   (let [cookies (:cookie request)
         [cookie-name
