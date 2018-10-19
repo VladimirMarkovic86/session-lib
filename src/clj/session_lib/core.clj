@@ -1,5 +1,5 @@
 (ns session-lib.core
-  (:require [db-lib.core :as db]
+  (:require [mongo-lib.core :as mon]
             [ajax-lib.http.entity-header :as eh]
             [ajax-lib.http.response-header :as rsh]
             [ajax-lib.http.mime-type :as mt]
@@ -40,10 +40,10 @@
    timeout-in-seconds
    user-agent]
   (try
-    (if-let [session-obj (db/find-one-by-filter
+    (if-let [session-obj (mon/mongodb-find-one
                            cookie-name
                            {:uuid session-uuid})]
-      (db/update-by-id
+      (mon/mongodb-update-by-id
         cookie-name
         (:_id session-obj)
         {:created-at (java.util.Date.)})
@@ -52,7 +52,7 @@
                          :user-id user-id
                          :username username
                          :created-at (java.util.Date.)}]
-        (db/insert-one
+        (mon/mongodb-insert-one
           cookie-name
           session-obj))
      )
@@ -112,12 +112,12 @@
                           :session)
                         (get-cookie
                           cookies
-                          :long_session)
+                          :long-session)
                         -1)]
-   (if-let [uuid (db/find-one-by-filter
+   (if-let [uuid (mon/mongodb-find-one
                    "session"
                    {:uuid session-uuid})]
-     (if-let [preferences (db/find-one-by-filter
+     (if-let [preferences (mon/mongodb-find-one
                             "preferences"
                             {:user-id (:user-id uuid)})]
        {:status (stc/ok)
@@ -132,10 +132,10 @@
                 {:status "It's ok"
                  :username (:username uuid)
                  :language-name "English"})})
-     (if-let [uuid (db/find-one-by-filter
-                     "long_session"
+     (if-let [uuid (mon/mongodb-find-one
+                     "long-session"
                      {:uuid session-uuid})]
-       (if-let [preferences (db/find-one-by-filter
+       (if-let [preferences (mon/mongodb-find-one
                               "preferences"
                               {:user-id (:user-id uuid)})]
          {:status (stc/ok)
@@ -174,7 +174,7 @@
                        :session)
         long-session-uuid (get-cookie
                             (:cookie request)
-                            :long_session)
+                            :long-session)
         user-agent (:user-agent request)
         [session-uuid
          cookie-name
@@ -184,7 +184,7 @@
                          session-timeout-num]
                         (when long-session-uuid
                           [long-session-uuid
-                           "long_session"
+                           "long-session"
                            long-session-timeout-num]))]
     [(rsh/set-cookie)
      (session-cookie-string
@@ -204,7 +204,7 @@
    user-agent]
   (if remember-me
     (session-cookie-string
-      "long_session"
+      "long-session"
       (:_id user)
       (:username user)
       uuid
@@ -231,11 +231,11 @@
                   uuid]
                  (when-let [uuid (get-cookie
                                    cookies
-                                   :long_session)]
-                   ["long_session"
+                                   :long-session)]
+                   ["long-session"
                     uuid]))]
     (try
-      (db/delete-by-filter
+      (mon/mongodb-delete-by-filter
         cookie-name
         {:uuid uuid})
       {:status (stc/ok)
@@ -251,63 +251,69 @@
 (defn create-indexes
   "Create indexes for system to work"
   []
-  (when (not (db/index-exists?
+  (when (not (mon/mongodb-index-exists?
                "user"
                "username-unique-idx"))
-    (db/create-unique-index
+    (mon/mongodb-create-index
       "user"
-      [:username]
-      "username-unique-idx"))
-  (when (not (db/index-exists?
+      {:username 1}
+      "username-unique-idx"
+      true))
+  (when (not (mon/mongodb-index-exists?
                "user"
                "email-unique-idx"))
-    (db/create-unique-index
+    (mon/mongodb-create-index
       "user"
-      [:email]
-      "email-unique-idx"))
-  (when (not (db/index-exists?
+      {:email 1}
+      "email-unique-idx"
+      true))
+  (when (not (mon/mongodb-index-exists?
                "session"
                "short-session-idx"))
-    (db/create-ttl-index
+    (mon/mongodb-create-index
       "session"
-      :created-at
+      {:created-at 1}
       "short-session-idx"
+      false
       session-timeout-num))
-  (when (not (db/index-exists?
+  (when (not (mon/mongodb-index-exists?
                "session"
                "session-uuid-unique-idx"))
-    (db/create-unique-index
+    (mon/mongodb-create-index
       "session"
-      [:uuid]
-      "session-uuid-unique-idx"))
-  (when (not (db/index-exists?
-               "long_session"
+      {:uuid 1}
+      "session-uuid-unique-idx"
+      true))
+  (when (not (mon/mongodb-index-exists?
+               "long-session"
                "long-session-idx"))
-    (db/create-ttl-index
-      "long_session"
-      :created-at
+    (mon/mongodb-create-index
+      "long-session"
+      {:created-at 1}
       "long-session-idx"
+      false
       long-session-timeout-num))
-  (when (not (db/index-exists?
-               "long_session"
+  (when (not (mon/mongodb-index-exists?
+               "long-session"
                "long-session-uuid-unique-idx"))
-    (db/create-unique-index
-      "long_session"
-      [:uuid]
-      "long-session-uuid-unique-idx"))
+    (mon/mongodb-create-index
+      "long-session"
+      {:uuid 1}
+      "long-session-uuid-unique-idx"
+      true))
  )
 
 (defn get-pass-for-email-username
   "Get password for supplied email"
   [email-username
    password]
-  (if-let [user-username (db/find-one-by-filter
+  (if-let [user-username (mon/mongodb-find-one
                            "user"
                            {:username email-username})]
     (let [db-password (:password user-username)]
       (if (= db-password
              password)
-        (if-let [preferences (db/find-one-by-filter
+        (if-let [preferences (mon/mongodb-find-one
                                "preferences"
                                {:user-id (:_id user-username)})]
           [{:status "success"
@@ -325,13 +331,13 @@
         [{:status "error"
           :email "success"
           :password "error"}]))
-    (if-let [user-email (db/find-one-by-filter
+    (if-let [user-email (mon/mongodb-find-one
                           "user"
                           {:email email-username})]
       (let [db-password (:password user-email)]
         (if (= db-password
                password)
-          (if-let [preferences (db/find-one-by-filter
+          (if-let [preferences (mon/mongodb-find-one
                                  "preferences"
                                  {:user-id (:_id email-username)})]
             [{:status "success"
