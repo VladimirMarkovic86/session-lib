@@ -113,48 +113,74 @@
                         (get-cookie
                           cookies
                           :long-session)
-                        -1)]
+                        -1)
+       status-a (atom nil)
+       body-a (atom nil)]
    (if-let [uuid (mon/mongodb-find-one
                    "session"
                    {:uuid session-uuid})]
      (if-let [preferences (mon/mongodb-find-one
                             "preferences"
                             {:user-id (:user-id uuid)})]
-       {:status (stc/ok)
-        :headers {(eh/content-type) (mt/text-plain)}
-        :body (str
-                {:status "It's ok"
-                 :username (:username uuid)
-                 :language-name (:language-name preferences)})}
-       {:status (stc/ok)
-        :headers {(eh/content-type) (mt/text-plain)}
-        :body (str
-                {:status "It's ok"
-                 :username (:username uuid)
-                 :language-name "English"})})
+       (do
+         (reset!
+           status-a
+           (stc/ok))
+         (reset!
+           body-a
+           {:status "It's ok"
+            :username (:username uuid)
+            :language-name (:language-name preferences)})
+        )
+       (do
+        (reset!
+           status-a
+           (stc/ok))
+         (reset!
+           body-a
+           {:status "It's ok"
+            :username (:username uuid)
+            :language-name "English"}))
+      )
      (if-let [uuid (mon/mongodb-find-one
                      "long-session"
                      {:uuid session-uuid})]
        (if-let [preferences (mon/mongodb-find-one
                               "preferences"
                               {:user-id (:user-id uuid)})]
-         {:status (stc/ok)
-          :headers {(eh/content-type) (mt/text-plain)}
-          :body (str
-                  {:status "It's ok"
-                   :username (:username uuid)
-                   :language-name (:language-name preferences)})}
-         {:status (stc/ok)
-          :headers {(eh/content-type) (mt/text-plain)}
-          :body (str
-                  {:status "It's ok"
-                   :username (:username uuid)
-                   :language-name "English"})}
+         (do
+           (reset!
+             status-a
+             (stc/ok))
+           (reset!
+             body-a
+             {:status "It's ok"
+              :username (:username uuid)
+              :language-name (:language-name preferences)})
+          )
+         (do
+           (reset!
+              status-a
+              (stc/ok))
+            (reset!
+              body-a
+              {:status "It's ok"
+               :username (:username uuid)
+               :language-name "English"}))
         )
-       {:status (stc/unauthorized)
-        :headers {(eh/content-type) (mt/text-plain)}
-        :body "It's not ok"}))
-  ))
+       (do
+         (reset!
+            status-a
+            (stc/unauthorized))
+          (reset!
+            body-a
+            "It's not ok"))
+      ))
+    {:status @status-a
+     :headers {(eh/content-type) (mt/text-plain)}
+     :body (str
+             @body-a)})
+ )
 
 (defn am-i-logged-in-fn
   "Shortcut function for result comparation of am-i-logged-in function
