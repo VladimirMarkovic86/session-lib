@@ -3,7 +3,11 @@
             [ajax-lib.http.entity-header :as eh]
             [ajax-lib.http.response-header :as rsh]
             [ajax-lib.http.mime-type :as mt]
-            [ajax-lib.http.status-code :as stc]))
+            [ajax-lib.http.status-code :as stc]
+            [common-middle.collection-names :refer [preferences-cname
+                                                    session-cname
+                                                    long-session-cname
+                                                    user-cname]]))
 
 (def session-timeout-num
      (* 30 60))
@@ -117,10 +121,10 @@
        status-a (atom nil)
        body-a (atom nil)]
    (if-let [uuid (mon/mongodb-find-one
-                   "session"
+                   session-cname
                    {:uuid session-uuid})]
      (if-let [preferences (mon/mongodb-find-one
-                            "preferences"
+                            preferences-cname
                             {:user-id (:user-id uuid)})]
        (do
          (reset!
@@ -143,10 +147,10 @@
             :language-name "English"}))
       )
      (if-let [uuid (mon/mongodb-find-one
-                     "long-session"
+                     long-session-cname
                      {:uuid session-uuid})]
        (if-let [preferences (mon/mongodb-find-one
-                              "preferences"
+                              preferences-cname
                               {:user-id (:user-id uuid)})]
          (do
            (reset!
@@ -206,11 +210,11 @@
          cookie-name
          timeout-num] (if session-uuid
                         [session-uuid
-                         "session"
+                         session-cname
                          session-timeout-num]
                         (when long-session-uuid
                           [long-session-uuid
-                           "long-session"
+                           long-session-cname
                            long-session-timeout-num]))]
     [(rsh/set-cookie)
      (session-cookie-string
@@ -230,14 +234,14 @@
    user-agent]
   (if remember-me
     (session-cookie-string
-      "long-session"
+      long-session-cname
       (:_id user)
       (:username user)
       uuid
       long-session-timeout-num
       user-agent)
     (session-cookie-string
-      "session"
+      session-cname
       (:_id user)
       (:username user)
       uuid
@@ -253,12 +257,12 @@
          uuid] (if-let [uuid (get-cookie
                                cookies
                                :session)]
-                 ["session"
+                 [session-cname
                   uuid]
                  (when-let [uuid (get-cookie
                                    cookies
                                    :long-session)]
-                   ["long-session"
+                   [long-session-cname
                     uuid]))]
     (try
       (mon/mongodb-delete-by-filter
@@ -278,52 +282,52 @@
   "Create indexes for system to work"
   []
   (when (not (mon/mongodb-index-exists?
-               "user"
+               user-cname
                "username-unique-idx"))
     (mon/mongodb-create-index
-      "user"
+      user-cname
       {:username 1}
       "username-unique-idx"
       true))
   (when (not (mon/mongodb-index-exists?
-               "user"
+               user-cname
                "email-unique-idx"))
     (mon/mongodb-create-index
-      "user"
+      user-cname
       {:email 1}
       "email-unique-idx"
       true))
   (when (not (mon/mongodb-index-exists?
-               "session"
+               session-cname
                "short-session-idx"))
     (mon/mongodb-create-index
-      "session"
+      session-cname
       {:created-at 1}
       "short-session-idx"
       false
       session-timeout-num))
   (when (not (mon/mongodb-index-exists?
-               "session"
+               session-cname
                "session-uuid-unique-idx"))
     (mon/mongodb-create-index
-      "session"
+      session-cname
       {:uuid 1}
       "session-uuid-unique-idx"
       true))
   (when (not (mon/mongodb-index-exists?
-               "long-session"
+               long-session-cname
                "long-session-idx"))
     (mon/mongodb-create-index
-      "long-session"
+      long-session-cname
       {:created-at 1}
       "long-session-idx"
       false
       long-session-timeout-num))
   (when (not (mon/mongodb-index-exists?
-               "long-session"
+               long-session-cname
                "long-session-uuid-unique-idx"))
     (mon/mongodb-create-index
-      "long-session"
+      long-session-cname
       {:uuid 1}
       "long-session-uuid-unique-idx"
       true))
@@ -334,13 +338,13 @@
   [email-username
    password]
   (if-let [user-username (mon/mongodb-find-one
-                           "user"
+                           user-cname
                            {:username email-username})]
     (let [db-password (:password user-username)]
       (if (= db-password
              password)
         (if-let [preferences (mon/mongodb-find-one
-                               "preferences"
+                               preferences-cname
                                {:user-id (:_id user-username)})]
           [{:status "success"
             :email "success"
@@ -358,13 +362,13 @@
           :email "success"
           :password "error"}]))
     (if-let [user-email (mon/mongodb-find-one
-                          "user"
+                          user-cname
                           {:email email-username})]
       (let [db-password (:password user-email)]
         (if (= db-password
                password)
           (if-let [preferences (mon/mongodb-find-one
-                                 "preferences"
+                                 preferences-cname
                                  {:user-id (:_id email-username)})]
             [{:status "success"
               :email "success"
