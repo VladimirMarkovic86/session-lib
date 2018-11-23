@@ -1,4 +1,4 @@
-(defproject org.clojars.vladimirmarkovic86/session-lib "0.2.2"
+(defproject org.clojars.vladimirmarkovic86/session-lib "0.2.3"
   :description "Session library"
   :url "http://github.com/VladimirMarkovic86/session-lib"
   :license {:name "Eclipse Public License"
@@ -6,7 +6,7 @@
   :dependencies [[org.clojure/clojure "1.9.0"]
                  [org.clojars.vladimirmarkovic86/mongo-lib "0.2.2"]
                  [org.clojars.vladimirmarkovic86/ajax-lib "0.1.0"]
-                 [org.clojars.vladimirmarkovic86/common-middle "0.2.1"]
+                 [org.clojars.vladimirmarkovic86/common-middle "0.2.2"]
                  ]
 
   :min-lein-version "2.0.0"

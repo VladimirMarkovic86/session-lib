@@ -7,6 +7,8 @@
             [common-middle.collection-names :refer [preferences-cname
                                                     session-cname
                                                     long-session-cname
+                                                    session-visible-cname
+                                                    long-session-visible-cname
                                                     user-cname]]))
 
 (def session-timeout-num
@@ -42,24 +44,28 @@
    username
    session-uuid
    timeout-in-seconds
-   user-agent]
+   user-agent
+   & [is-secure-on
+      is-httponly-on
+      is-persistent]]
   (try
-    (if-let [session-obj (mon/mongodb-find-one
-                           cookie-name
-                           {:uuid session-uuid})]
-      (mon/mongodb-update-by-id
-        cookie-name
-        (:_id session-obj)
-        {:created-at (java.util.Date.)})
-      (let [session-obj {:uuid session-uuid
-                         :user-agent user-agent
-                         :user-id user-id
-                         :username username
-                         :created-at (java.util.Date.)}]
-        (mon/mongodb-insert-one
+    (when is-persistent
+      (if-let [session-obj (mon/mongodb-find-one
+                             cookie-name
+                             {:uuid session-uuid})]
+        (mon/mongodb-update-by-id
           cookie-name
-          session-obj))
-     )
+          (:_id session-obj)
+          {:created-at (java.util.Date.)})
+        (let [session-obj {:uuid session-uuid
+                           :user-agent user-agent
+                           :user-id user-id
+                           :username username
+                           :created-at (java.util.Date.)}]
+          (mon/mongodb-insert-one
+            cookie-name
+            session-obj))
+       ))
     (str
       cookie-name
       "=" session-uuid "; "
@@ -68,9 +74,10 @@
       "Max-Age=" timeout-in-seconds "; "
       "Path=/; "
       ;"Domain=sample; "
-      ;"Secure; "
-      ;"HttpOnly"
-     )
+      (when is-secure-on
+        "Secure; ")
+      (when is-httponly-on
+        "HttpOnly; "))
     (catch Exception e
       (println (.getMessage e))
      ))
@@ -216,14 +223,25 @@
                           [long-session-uuid
                            long-session-cname
                            long-session-timeout-num]))]
-    [(rsh/set-cookie)
-     (session-cookie-string
+    [(session-cookie-string
        cookie-name
        nil
        nil
        session-uuid
        timeout-num
-       user-agent)])
+       user-agent
+       true
+       true
+       true)
+     (session-cookie-string
+       (str
+         cookie-name
+         "-visible")
+       nil
+       nil
+       "exists"
+       timeout-num
+       nil)])
  )
 
 (defn session-cookie-string-fn
@@ -233,20 +251,40 @@
    uuid
    user-agent]
   (if remember-me
-    (session-cookie-string
-      long-session-cname
-      (:_id user)
-      (:username user)
-      uuid
-      long-session-timeout-num
-      user-agent)
-    (session-cookie-string
-      session-cname
-      (:_id user)
-      (:username user)
-      uuid
-      session-timeout-num
-      user-agent))
+    [(session-cookie-string
+       long-session-cname
+       (:_id user)
+       (:username user)
+       uuid
+       long-session-timeout-num
+       user-agent
+       true
+       true
+       true)
+     (session-cookie-string
+       long-session-visible-cname
+       nil
+       nil
+       "exists"
+       long-session-timeout-num
+       nil)]
+    [(session-cookie-string
+       session-cname
+       (:_id user)
+       (:username user)
+       uuid
+       session-timeout-num
+       user-agent
+       true
+       true
+       true)
+     (session-cookie-string
+       session-visible-cname
+       nil
+       nil
+       "exists"
+       session-timeout-num
+       nil)])
  )
 
 (defn delete-session-record
@@ -263,13 +301,33 @@
                                    cookies
                                    :long-session)]
                    [long-session-cname
-                    uuid]))]
+                    uuid]))
+        destroy-cookie (session-cookie-string
+                         cookie-name
+                         nil
+                         nil
+                         "destroyed"
+                         0
+                         nil
+                         true
+                         true)
+        destroy-visible-cookie (session-cookie-string
+                                 (str
+                                   cookie-name
+                                   "-visible")
+                                 nil
+                                 nil
+                                 "destroyed"
+                                 0
+                                 nil)]
     (try
       (mon/mongodb-delete-by-filter
         cookie-name
         {:uuid uuid})
       {:status (stc/ok)
-       :headers {(eh/content-type) (mt/text-plain)}
+       :headers {(eh/content-type) (mt/text-plain)
+                 (rsh/set-cookie) [destroy-cookie
+                                   destroy-visible-cookie]}
        :body "Bye bye"}
       (catch Exception e
         (println (.getMessage e))
@@ -404,15 +462,17 @@
     (if (= (:status result)
            "success")
       (let [uuid (.toString (java.util.UUID/randomUUID))
-            session-cookie (session-cookie-string-fn
-                             remember-me
-                             user
-                             uuid
-                             user-agent)]
+            [session-cookie
+             session-visible-cookie] (session-cookie-string-fn
+                                       remember-me
+                                       user
+                                       uuid
+                                       user-agent)]
         (if session-cookie
           {:status (stc/ok)
            :headers {(eh/content-type) (mt/text-plain)
-                     (rsh/set-cookie) session-cookie}
+                     (rsh/set-cookie) [session-cookie
+                                       session-visible-cookie]}
            :body (str result)}
           {:status (stc/internal-server-error)
            :headers {(eh/content-type) (mt/text-plain)}
