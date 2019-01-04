@@ -141,6 +141,7 @@
            body-a
            {:status "It's ok"
             :username (:username uuid)
+            :language (:language preferences)
             :language-name (:language-name preferences)})
         )
        (do
@@ -151,6 +152,7 @@
            body-a
            {:status "It's ok"
             :username (:username uuid)
+            :language "english"
             :language-name "English"}))
       )
      (if-let [uuid (mon/mongodb-find-one
@@ -167,6 +169,7 @@
              body-a
              {:status "It's ok"
               :username (:username uuid)
+              :language (:language preferences)
               :language-name (:language-name preferences)})
           )
          (do
@@ -177,6 +180,7 @@
               body-a
               {:status "It's ok"
                :username (:username uuid)
+               :language "english"
                :language-name "English"}))
         )
        (do
@@ -408,12 +412,14 @@
             :email "success"
             :password "success"
             :username (:username user-username)
+            :language (:language preferences)
             :language-name (:language-name preferences)}
            user-username]
           [{:status "success"
             :email "success"
             :password "success"
             :username (:username user-username)
+            :language "english"
             :language-name "English"}
            user-username])
         [{:status "error"
@@ -425,21 +431,30 @@
       (let [db-password (:password user-email)]
         (if (= db-password
                password)
-          (if-let [preferences (mon/mongodb-find-one
-                                 preferences-cname
-                                 {:user-id (:_id email-username)})]
-            [{:status "success"
-              :email "success"
-              :password "success"
-              :username (:username user-email)
-              :language-name (:language-name preferences)}
-             user-email]
-            [{:status "success"
-              :email "success"
-              :password "success"
-              :username (:username user-email)
-              :language-name "English"}
-             user-email])
+          (let [preferences (mon/mongodb-find-one
+                              preferences-cname
+                              {:user-id (:_id user-email)})]
+            (if (and preferences
+                     (map?
+                       preferences)
+                     (not
+                       (empty?
+                         preferences))
+                 )
+              [{:status "success"
+                :email "success"
+                :password "success"
+                :username (:username user-email)
+                :language (:language preferences)
+                :language-name (:language-name preferences)}
+               user-email]
+              [{:status "success"
+                :email "success"
+                :password "success"
+                :username (:username user-email)
+                :language "english"
+                :language-name "English"}
+               user-email]))
           [{:status "error"
             :email "success"
             :password "error"}]))
