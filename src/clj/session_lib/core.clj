@@ -4,6 +4,8 @@
             [ajax-lib.http.response-header :as rsh]
             [ajax-lib.http.mime-type :as mt]
             [ajax-lib.http.status-code :as stc]
+            [clojure.string :as cstring]
+            [clojure.set :as cset]
             [common-middle.collection-names :refer [preferences-cname
                                                     session-cname
                                                     long-session-cname
@@ -114,6 +116,49 @@
        cookie-name))
    ))
 
+(defn get-accept-language
+  "Read accept-language header for selected language"
+  [request]
+  (let [accept-language (:accept-language request)]
+    (if accept-language
+      (let [language-vector (cstring/split
+                              accept-language
+                              #",")
+            first-choice-language (if (cstring/index-of
+                                        (first
+                                          language-vector)
+                                        "sr")
+                                    "sr"
+                                    (when (cstring/index-of
+                                            (first
+                                              language-vector)
+                                            "en")
+                                      "en"))
+            selected-language (if first-choice-language
+                                first-choice-language
+                                (let [language-set (into
+                                                     #{}
+                                                     language-vector)
+                                      selected-language (cset/select
+                                                          (fn [elem]
+                                                            (cstring/index-of
+                                                              elem
+                                                              "sr"))
+                                                            language-set)
+                                      selected-language (if (empty?
+                                                              selected-language)
+                                                          "en"
+                                                          (first
+                                                            selected-language))]
+                                  selected-language))]
+        (if (cstring/index-of
+              selected-language
+              "sr")
+          "serbian"
+          "english"))
+      "english"))
+ )
+
 (defn am-i-logged-in
  "Check if user is logged in"
  [request]
@@ -125,6 +170,10 @@
                           cookies
                           :long-session)
                         -1)
+       accepted-language (get-accept-language
+                           request)
+       accepted-language-name (cstring/capitalize
+                                request)
        status-a (atom nil)
        body-a (atom nil)]
    (if-let [uuid (mon/mongodb-find-one
@@ -152,8 +201,8 @@
            body-a
            {:status "It's ok"
             :username (:username uuid)
-            :language "english"
-            :language-name "English"}))
+            :language accepted-language
+            :language-name accepted-language-name}))
       )
      (if-let [uuid (mon/mongodb-find-one
                      long-session-cname
@@ -180,8 +229,8 @@
               body-a
               {:status "It's ok"
                :username (:username uuid)
-               :language "english"
-               :language-name "English"}))
+               :language accepted-language
+               :language-name accepted-language-name}))
         )
        (do
          (reset!
@@ -398,82 +447,89 @@
 (defn get-pass-for-email-username
   "Get password for supplied email"
   [email-username
-   password]
-  (if-let [user-username (mon/mongodb-find-one
-                           user-cname
-                           {:username email-username})]
-    (let [db-password (:password user-username)]
-      (if (= db-password
-             password)
-        (if-let [preferences (mon/mongodb-find-one
-                               preferences-cname
-                               {:user-id (:_id user-username)})]
-          [{:status "success"
-            :email "success"
-            :password "success"
-            :username (:username user-username)
-            :language (:language preferences)
-            :language-name (:language-name preferences)}
-           user-username]
-          [{:status "success"
-            :email "success"
-            :password "success"
-            :username (:username user-username)
-            :language "english"
-            :language-name "English"}
-           user-username])
-        [{:status "error"
-          :email "success"
-          :password "error"}]))
-    (if-let [user-email (mon/mongodb-find-one
-                          user-cname
-                          {:email email-username})]
-      (let [db-password (:password user-email)]
+   password
+   & [accept-language]]
+  (let [accepted-language (get-accept-language
+                            {:accept-language accept-language})
+        accepted-language-name (cstring/capitalize
+                                 accepted-language)]
+    (if-let [user-username (mon/mongodb-find-one
+                             user-cname
+                             {:username email-username})]
+      (let [db-password (:password user-username)]
         (if (= db-password
                password)
-          (let [preferences (mon/mongodb-find-one
-                              preferences-cname
-                              {:user-id (:_id user-email)})]
-            (if (and preferences
-                     (map?
-                       preferences)
-                     (not
-                       (empty?
-                         preferences))
-                 )
-              [{:status "success"
-                :email "success"
-                :password "success"
-                :username (:username user-email)
-                :language (:language preferences)
-                :language-name (:language-name preferences)}
-               user-email]
-              [{:status "success"
-                :email "success"
-                :password "success"
-                :username (:username user-email)
-                :language "english"
-                :language-name "English"}
-               user-email]))
+          (if-let [preferences (mon/mongodb-find-one
+                                 preferences-cname
+                                 {:user-id (:_id user-username)})]
+            [{:status "success"
+              :email "success"
+              :password "success"
+              :username (:username user-username)
+              :language (:language preferences)
+              :language-name (:language-name preferences)}
+             user-username]
+            [{:status "success"
+              :email "success"
+              :password "success"
+              :username (:username user-username)
+              :language accepted-language
+              :language-name accepted-language-name}
+             user-username])
           [{:status "error"
             :email "success"
             :password "error"}]))
-      [{:status "error"
-        :email "error"
-        :password "error"}]))
- )
+      (if-let [user-email (mon/mongodb-find-one
+                            user-cname
+                            {:email email-username})]
+        (let [db-password (:password user-email)]
+          (if (= db-password
+                 password)
+            (let [preferences (mon/mongodb-find-one
+                                preferences-cname
+                                {:user-id (:_id user-email)})]
+              (if (and preferences
+                       (map?
+                         preferences)
+                       (not
+                         (empty?
+                           preferences))
+                   )
+                [{:status "success"
+                  :email "success"
+                  :password "success"
+                  :username (:username user-email)
+                  :language (:language preferences)
+                  :language-name (:language-name preferences)}
+                 user-email]
+                [{:status "success"
+                  :email "success"
+                  :password "success"
+                  :username (:username user-email)
+                  :language accepted-language
+                  :language-name accepted-language-name}
+                 user-email]))
+            [{:status "error"
+              :email "success"
+              :password "error"}]))
+        [{:status "error"
+          :email "error"
+          :password "error"}]))
+   ))
 
 (defn login-authentication
   "Login authentication"
   [request-body
-   user-agent]
+   user-agent
+   accept-language]
   (let [email-username (:email request-body)
         password (:password request-body)
         remember-me (:remember-me request-body)
         [result
          user] (get-pass-for-email-username
                  email-username
-                 password)]
+                 password
+                 accept-language)]
     (if (= (:status result)
            "success")
       (let [uuid (.toString (java.util.UUID/randomUUID))

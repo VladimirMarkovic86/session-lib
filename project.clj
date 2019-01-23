@@ -1,4 +1,4 @@
-(defproject org.clojars.vladimirmarkovic86/session-lib "0.2.5"
+(defproject org.clojars.vladimirmarkovic86/session-lib "0.2.6"
   :description "Session library"
   :url "http://github.com/VladimirMarkovic86/session-lib"
   :license {:name "Eclipse Public License"
