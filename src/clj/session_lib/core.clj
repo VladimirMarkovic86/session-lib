@@ -1,5 +1,6 @@
 (ns session-lib.core
   (:require [mongo-lib.core :as mon]
+            [utils-lib.core :refer [parse-body]]
             [ajax-lib.http.entity-header :as eh]
             [ajax-lib.http.response-header :as rsh]
             [ajax-lib.http.mime-type :as mt]
@@ -519,10 +520,12 @@
 
 (defn login-authentication
   "Login authentication"
-  [request-body
-   user-agent
-   accept-language]
-  (let [email-username (:email request-body)
+  [request]
+  (let [request-body (parse-body
+                       request)
+        {user-agent :user-agent
+         accept-language :accept-language} request
+        email-username (:email request-body)
         password (:password request-body)
         remember-me (:remember-me request-body)
         [result
@@ -559,4 +562,24 @@
   [request]
   (delete-session-record
     request))
+
+(defn set-session-cookies
+  "Set session cookies"
+  [request
+   response]
+  (let [[cookie-value
+         visible-cookie-value] (refresh-session
+                                 request)]
+    (if (contains?
+          (:headers response)
+          (rsh/set-cookie))
+      response
+      (update-in
+        response
+        [:headers]
+        assoc
+        (rsh/set-cookie)
+        [cookie-value
+         visible-cookie-value]))
+   ))
 
