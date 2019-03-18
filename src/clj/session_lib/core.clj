@@ -1,6 +1,5 @@
 (ns session-lib.core
   (:require [mongo-lib.core :as mon]
-            [utils-lib.core :refer [parse-body]]
             [ajax-lib.http.entity-header :as eh]
             [ajax-lib.http.response-header :as rsh]
             [ajax-lib.http.mime-type :as mt]
@@ -242,9 +241,8 @@
             "It's not ok"))
       ))
     {:status @status-a
-     :headers {(eh/content-type) (mt/text-plain)}
-     :body (str
-             @body-a)})
+     :headers {(eh/content-type) (mt/text-clojurescript)}
+     :body @body-a})
  )
 
 (defn am-i-logged-in-fn
@@ -521,7 +519,7 @@
 (defn login-authentication
   "Login authentication"
   [request]
-  (let [request-body (parse-body
+  (let [request-body (:body
                        request)
         {user-agent :user-agent
          accept-language :accept-language} request
@@ -532,7 +530,10 @@
          user] (get-pass-for-email-username
                  email-username
                  password
-                 accept-language)]
+                 accept-language)
+        headers (atom
+                  {(eh/content-type) (mt/text-clojurescript)})
+        status-code (atom (stc/ok))]
     (if (= (:status result)
            "success")
       (let [uuid (.toString (java.util.UUID/randomUUID))
@@ -543,19 +544,23 @@
                                        uuid
                                        user-agent)]
         (if session-cookie
-          {:status (stc/ok)
-           :headers {(eh/content-type) (mt/text-plain)
-                     (rsh/set-cookie) [session-cookie
-                                       session-visible-cookie]}
-           :body (str result)}
-          {:status (stc/internal-server-error)
-           :headers {(eh/content-type) (mt/text-plain)}
-           :body (str result)})
-       )
-      {:status (stc/unauthorized)
-       :headers {(eh/content-type) (mt/text-plain)}
-       :body (str result)})
-   ))
+          (swap!
+            headers
+            assoc
+            (rsh/set-cookie)
+            [session-cookie
+             session-visible-cookie])
+          (reset!
+            status-code
+            (stc/internal-server-error))
+         ))
+      (reset!
+        status-code
+        (stc/unauthorized))
+     )
+    {:status @status-code
+     :headers @headers
+     :body result}))
 
 (defn logout
   "Logout user from system"
