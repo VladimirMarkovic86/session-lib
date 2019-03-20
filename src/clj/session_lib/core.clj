@@ -173,7 +173,7 @@
        accepted-language (get-accept-language
                            request)
        accepted-language-name (cstring/capitalize
-                                request)
+                                accepted-language)
        status-a (atom nil)
        body-a (atom nil)]
    (if-let [uuid (mon/mongodb-find-one
@@ -519,48 +519,57 @@
 (defn login-authentication
   "Login authentication"
   [request]
-  (let [request-body (:body
-                       request)
-        {user-agent :user-agent
-         accept-language :accept-language} request
-        email-username (:email request-body)
-        password (:password request-body)
-        remember-me (:remember-me request-body)
-        [result
-         user] (get-pass-for-email-username
-                 email-username
-                 password
-                 accept-language)
-        headers (atom
-                  {(eh/content-type) (mt/text-clojurescript)})
-        status-code (atom (stc/ok))]
-    (if (= (:status result)
-           "success")
-      (let [uuid (.toString (java.util.UUID/randomUUID))
-            [session-cookie
-             session-visible-cookie] (session-cookie-string-fn
-                                       remember-me
-                                       user
-                                       uuid
-                                       user-agent)]
-        (if session-cookie
-          (swap!
-            headers
-            assoc
-            (rsh/set-cookie)
-            [session-cookie
-             session-visible-cookie])
-          (reset!
-            status-code
-            (stc/internal-server-error))
-         ))
-      (reset!
-        status-code
-        (stc/unauthorized))
-     )
-    {:status @status-code
-     :headers @headers
-     :body result}))
+  (try
+    (let [request-body (:body
+                         request)
+          {user-agent :user-agent
+           accept-language :accept-language} request
+          email-username (:email request-body)
+          password (:password request-body)
+          remember-me (:remember-me request-body)
+          [result
+           user] (get-pass-for-email-username
+                   email-username
+                   password
+                   accept-language)
+          headers (atom
+                    {(eh/content-type) (mt/text-clojurescript)})
+          status-code (atom (stc/ok))]
+      (if (= (:status result)
+             "success")
+        (let [uuid (.toString (java.util.UUID/randomUUID))
+              [session-cookie
+               session-visible-cookie] (session-cookie-string-fn
+                                         remember-me
+                                         user
+                                         uuid
+                                         user-agent)]
+          (if session-cookie
+            (swap!
+              headers
+              assoc
+              (rsh/set-cookie)
+              [session-cookie
+               session-visible-cookie])
+            (reset!
+              status-code
+              (stc/internal-server-error))
+           ))
+        (reset!
+          status-code
+          (stc/unauthorized))
+       )
+      {:status @status-code
+       :headers @headers
+       :body result})
+    (catch Exception e
+      (println
+        (.getMessage
+          e))
+      {:status (stc/internal-server-error)
+       :headers {(eh/content-type) (mt/text-clojurescript)}
+       :body {:status "error"}}))
+ )
 
 (defn logout
   "Logout user from system"
