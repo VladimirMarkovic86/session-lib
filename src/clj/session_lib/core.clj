@@ -373,7 +373,7 @@
                                  0
                                  nil)]
     (try
-      (mon/mongodb-delete-by-filter
+      (mon/mongodb-delete-one
         cookie-name
         {:uuid uuid})
       {:status (stc/ok)
@@ -391,51 +391,51 @@
 (defn create-indexes
   "Create indexes for system to work"
   []
-  (when (not (mon/mongodb-index-exists?
-               user-cname
-               "username-unique-idx"))
+  (when-not (mon/mongodb-index-exists?
+              user-cname
+              "username-unique-idx")
     (mon/mongodb-create-index
       user-cname
       {:username 1}
       "username-unique-idx"
       true))
-  (when (not (mon/mongodb-index-exists?
-               user-cname
-               "email-unique-idx"))
+  (when-not (mon/mongodb-index-exists?
+              user-cname
+              "email-unique-idx")
     (mon/mongodb-create-index
       user-cname
       {:email 1}
       "email-unique-idx"
       true))
-  (when (not (mon/mongodb-index-exists?
-               session-cname
-               "short-session-idx"))
+  (when-not (mon/mongodb-index-exists?
+              session-cname
+              "short-session-idx")
     (mon/mongodb-create-index
       session-cname
       {:created-at 1}
       "short-session-idx"
       false
       session-timeout-num))
-  (when (not (mon/mongodb-index-exists?
-               session-cname
-               "session-uuid-unique-idx"))
+  (when-not (mon/mongodb-index-exists?
+              session-cname
+              "session-uuid-unique-idx")
     (mon/mongodb-create-index
       session-cname
       {:uuid 1}
       "session-uuid-unique-idx"
       true))
-  (when (not (mon/mongodb-index-exists?
-               long-session-cname
-               "long-session-idx"))
+  (when-not (mon/mongodb-index-exists?
+              long-session-cname
+              "long-session-idx")
     (mon/mongodb-create-index
       long-session-cname
       {:created-at 1}
       "long-session-idx"
       false
       long-session-timeout-num))
-  (when (not (mon/mongodb-index-exists?
-               long-session-cname
-               "long-session-uuid-unique-idx"))
+  (when-not (mon/mongodb-index-exists?
+              long-session-cname
+              "long-session-uuid-unique-idx")
     (mon/mongodb-create-index
       long-session-cname
       {:uuid 1}
