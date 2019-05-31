@@ -11,13 +11,17 @@
                                                     long-session-cname
                                                     session-visible-cname
                                                     long-session-visible-cname
-                                                    user-cname]]))
+                                                    user-cname
+                                                    reset-password-cname]]))
 
 (def session-timeout-num
      (* 30 60))
 
 (def long-session-timeout-num
      (* 3 365 24 60 60))
+
+(def reset-password-timeout-num
+     (* 5 60))
 
 (defn session-timeout
   "Return current date and time in particular format
@@ -519,6 +523,31 @@
       long-session-cname
       {:uuid 1}
       "long-session-uuid-unique-idx"
+      true))
+  (when-not (mon/mongodb-index-exists?
+              reset-password-cname
+              "reset-password-idx")
+    (mon/mongodb-create-index
+      reset-password-cname
+      {:created-at 1}
+      "reset-password-idx"
+      false
+      reset-password-timeout-num))
+  (when-not (mon/mongodb-index-exists?
+              reset-password-cname
+              "reset-password-uuid-unique-idx")
+    (mon/mongodb-create-index
+      reset-password-cname
+      {:uuid 1}
+      "reset-password-uuid-unique-idx"
+      true))
+  (when-not (mon/mongodb-index-exists?
+              reset-password-cname
+              "reset-password-email-unique-idx")
+    (mon/mongodb-create-index
+      reset-password-cname
+      {:email 1}
+      "reset-password-email-unique-idx"
       true))
  )
 
