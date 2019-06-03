@@ -210,34 +210,30 @@
  "Check if user is logged in"
  [request]
  (let [cookies (:cookie request)
-       session-uuid (get-cookie
-                      cookies
-                      :session)
        long-session-uuid (get-cookie
                            cookies
                            :long-session)
-       [session-uuid
-        session-collection] (if (and session-uuid
-                                     (string?
-                                       session-uuid))
-                              [session-uuid
-                               session-cname]
-                              (if (and long-session-uuid
-                                       (string?
-                                         long-session-uuid))
-                                [long-session-uuid
-                                 long-session-cname]
-                                [-1
-                                 nil]))
+       long-session-obj (when long-session-uuid
+                          (mon/mongodb-find-one
+                            long-session-cname
+                            {:uuid long-session-uuid}))
+       session-uuid (get-cookie
+                      cookies
+                      :session)
+       session-obj (when session-uuid
+                     (mon/mongodb-find-one
+                       session-cname
+                       {:uuid session-uuid}))
+       session-obj (or long-session-obj
+                       session-obj
+                       nil)
        accepted-language (get-accept-language
                            request)
        accepted-language-name (cstring/capitalize
                                 accepted-language)
        status-a (atom nil)
        body-a (atom nil)]
-   (if-let [session-obj (mon/mongodb-find-one
-                          session-collection
-                          {:uuid session-uuid})]
+   (if session-obj
      (if-let [preferences (mon/mongodb-find-one
                             preferences-cname
                             {:user-id (:user-id session-obj)})]
@@ -302,42 +298,69 @@
                (cstring/blank?
                  user-agent))
          )
-    (let [session-uuid (get-cookie
-                         cookie
-                         :session)
-          long-session-uuid (get-cookie
+    (let [long-session-uuid (get-cookie
                               cookie
                               :long-session)
-          [session-uuid
-           cookie-name
-           timeout-num] (if session-uuid
-                          [session-uuid
-                           session-cname
-                           session-timeout-num]
-                          (when long-session-uuid
-                            [long-session-uuid
-                             long-session-cname
-                             long-session-timeout-num]))]
-      [(session-cookie-string
-         cookie-name
-         nil
-         nil
-         session-uuid
-         timeout-num
-         user-agent
-         true
-         true
-         true)
-       (session-cookie-string
-         (str
-           cookie-name
-           "-visible")
-         nil
-         nil
-         "exists"
-         timeout-num
-         nil)])
-   ))
+          long-session-obj (when long-session-uuid
+                             (mon/mongodb-find-one
+                               long-session-cname
+                               {:uuid long-session-uuid}))
+          session-uuid (get-cookie
+                         cookie
+                         :session)
+          session-obj (when session-uuid
+                        (mon/mongodb-find-one
+                          session-cname
+                          {:uuid session-uuid}))
+          result (atom nil)]
+      (when long-session-obj
+        (reset!
+          result
+          [(session-cookie-string
+             long-session-cname
+             nil
+             nil
+             long-session-uuid
+             long-session-timeout-num
+             user-agent
+             true
+             true
+             true)
+           (session-cookie-string
+             (str
+               long-session-cname
+               "-visible")
+             nil
+             nil
+             "exists"
+             long-session-timeout-num
+             nil)])
+       )
+      (when session-obj
+        (reset!
+          result
+          [(session-cookie-string
+             session-cname
+             nil
+             nil
+             session-uuid
+             session-timeout-num
+             user-agent
+             true
+             true
+             true)
+           (session-cookie-string
+             (str
+               session-cname
+               "-visible")
+             nil
+             nil
+             "exists"
+             session-timeout-num
+             nil)])
+       )
+      @result))
+ )
 
 (defn session-cookie-string-fn
   "Format session cookie"
@@ -407,32 +430,27 @@
              (cstring/blank?
                cookies))
        )
-    (let [[collection-name
-           uuid] (if-let [uuid (get-cookie
-                                 cookies
-                                 :session)]
-                   [session-cname
-                    uuid]
-                   (when-let [uuid (get-cookie
-                                     cookies
-                                     :long-session)]
-                     [long-session-cname
-                      uuid]))]
-      (if (and collection-name
-               (string?
-                 collection-name)
-               (not
-                 (cstring/blank?
-                   collection-name))
-               uuid
-               (string?
-                 uuid)
-               (not
-                 (cstring/blank?
-                   uuid))
-           )
-        (let [destroy-cookie (session-cookie-string
-                               collection-name
+    (let [long-session-uuid (get-cookie
+                              cookies
+                              :long-session)
+          long-session-obj (when long-session-uuid
+                             (mon/mongodb-find-one
+                               long-session-cname
+                               {:uuid long-session-uuid}))
+          session-uuid (get-cookie
+                         cookies
+                         :session)
+          session-obj (when session-uuid
+                        (mon/mongodb-find-one
+                          session-cname
+                          {:uuid session-uuid}))
+          result (atom {:status (stc/internal-server-error)
+                        :headers {(eh/content-type) (mt/text-plain)}
+                        :body "Session cookies not present in request"})]
+      (when long-session-obj
+        (let [uuid (:uuid long-session-obj)
+              destroy-cookie (session-cookie-string
+                               long-session-cname
                                nil
                                nil
                                "destroyed"
@@ -442,7 +460,7 @@
                                true)
               destroy-visible-cookie (session-cookie-string
                                        (str
-                                         collection-name
+                                         long-session-cname
                                          "-visible")
                                        nil
                                        nil
@@ -451,22 +469,67 @@
                                        nil)]
           (try
             (mon/mongodb-delete-one
-              collection-name
+              long-session-cname
               {:uuid uuid})
-            {:status (stc/ok)
-             :headers {(eh/content-type) (mt/text-plain)
-                       (rsh/set-cookie) [destroy-cookie
-                                         destroy-visible-cookie]}
-             :body "Bye bye"}
+            (reset!
+              result
+              {:status (stc/ok)
+               :headers {(eh/content-type) (mt/text-plain)
+                         (rsh/set-cookie) [destroy-cookie
+                                           destroy-visible-cookie]
+                         (rsh/set-visible-cookie) destroy-visible-cookie}
+               :body "Bye bye"})
             (catch Exception e
               (println (.getMessage e))
-              {:status (stc/internal-server-error)
-               :headers {(eh/content-type) (mt/text-plain)}
-               :body "Stay for a little while"}))
-         )
-        {:status (stc/internal-server-error)
-         :headers {(eh/content-type) (mt/text-plain)}
-         :body "Session cookies not present in request"}))
+              (reset!
+                result
+                {:status (stc/internal-server-error)
+                 :headers {(eh/content-type) (mt/text-plain)}
+                 :body "Stay for a little while"}))
+           ))
+       )
+      (when session-obj
+        (let [uuid (:uuid session-obj)
+              destroy-cookie (session-cookie-string
+                               session-cname
+                               nil
+                               nil
+                               "destroyed"
+                               0
+                               nil
+                               true
+                               true)
+              destroy-visible-cookie (session-cookie-string
+                                       (str
+                                         session-cname
+                                         "-visible")
+                                       nil
+                                       nil
+                                       "destroyed"
+                                       0
+                                       nil)]
+          (try
+            (mon/mongodb-delete-one
+              session-cname
+              {:uuid uuid})
+            (reset!
+              result
+              {:status (stc/ok)
+               :headers {(eh/content-type) (mt/text-plain)
+                         (rsh/set-cookie) [destroy-cookie
+                                           destroy-visible-cookie]
+                         (rsh/set-visible-cookie) destroy-visible-cookie}
+               :body "Bye bye"})
+            (catch Exception e
+              (println (.getMessage e))
+              (reset!
+                result
+                {:status (stc/internal-server-error)
+                 :headers {(eh/content-type) (mt/text-plain)}
+                 :body "Stay for a little while"}))
+           ))
+       )
+      @result)
     {:status (stc/internal-server-error)
      :headers {(eh/content-type) (mt/text-plain)}
      :body "Cookies not present in request"}))
@@ -677,7 +740,8 @@
             status-code (atom (stc/ok))]
         (if (= (:status result)
                "success")
-          (let [uuid (.toString (java.util.UUID/randomUUID))
+          (let [uuid (.toString
+                       (java.util.UUID/randomUUID))
                 [session-cookie
                  session-visible-cookie] (session-cookie-string-fn
                                            remember-me
@@ -690,7 +754,9 @@
                 assoc
                 (rsh/set-cookie)
                 [session-cookie
-                 session-visible-cookie])
+                 session-visible-cookie]
+                (rsh/set-visible-cookie)
+                session-visible-cookie)
               (reset!
                 status-code
                 (stc/internal-server-error))
@@ -729,7 +795,8 @@
              response
              (map?
                response))
-    (let [[cookie-value
+    (let [response (atom response)
+          [cookie-value
            visible-cookie-value] (refresh-session
                                    request)]
       (if (and cookie-value
@@ -746,49 +813,86 @@
                    visible-cookie-value))
            )
         (let [set-cookies-header (get-in
-                                   response
+                                   @response
                                    [:headers
                                     (rsh/set-cookie)])]
-          (if set-cookies-header
-            (if (vector?
-                  set-cookies-header)
+          (when (and set-cookies-header
+                     (vector?
+                       set-cookies-header))
+            (reset!
+              response
               (update-in
-                response
+                @response
                 [:headers
                  (rsh/set-cookie)]
                 conj
                 cookie-value
-                visible-cookie-value)
-              (if (and (string?
-                         set-cookies-header)
-                       (not
-                         (cstring/blank?
-                           set-cookies-header))
-                   )
-                (update-in
-                  response
-                  [:headers]
-                  assoc
-                  (rsh/set-cookie)
-                  [set-cookies-header
-                   cookie-value
-                   visible-cookie-value])
-                (update-in
-                  response
-                  [:headers]
-                  assoc
-                  (rsh/set-cookie)
-                  [cookie-value
-                   visible-cookie-value]))
-             )
-            (update-in
+                visible-cookie-value))
+            (reset!
               response
-              [:headers]
-              assoc
-              (rsh/set-cookie)
-              [cookie-value
-               visible-cookie-value]))
-         )
-        response))
+              (update-in
+                @response
+                [:headers]
+                assoc
+                (rsh/set-visible-cookie)
+                visible-cookie-value))
+           )
+          (when (and set-cookies-header
+                     (and (string?
+                            set-cookies-header)
+                          (not
+                            (cstring/blank?
+                              set-cookies-header))
+                      ))
+            (reset!
+              response
+              (update-in
+                @response
+                [:headers]
+                assoc
+                (rsh/set-cookie)
+                [set-cookies-header
+                 cookie-value
+                 visible-cookie-value]
+                (rsh/set-visible-cookie)
+                visible-cookie-value))
+           )
+          (when (and set-cookies-header
+                     (not
+                       (and (string?
+                              set-cookies-header)
+                            (not
+                              (cstring/blank?
+                                set-cookies-header))
+                        ))
+                 )
+            (reset!
+              response
+              (update-in
+                @response
+                [:headers]
+                assoc
+                (rsh/set-cookie)
+                [cookie-value
+                 visible-cookie-value]
+                (rsh/set-visible-cookie)
+                visible-cookie-value))
+           )
+          (when (not
+                  set-cookies-header)
+            (reset!
+              response
+              (update-in
+                @response
+                [:headers]
+                assoc
+                (rsh/set-cookie)
+                [cookie-value
+                 visible-cookie-value]
+                (rsh/set-visible-cookie)
+                visible-cookie-value))
+           )
+          @response)
+        @response))
    ))
 
