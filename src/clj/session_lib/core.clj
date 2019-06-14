@@ -206,27 +206,46 @@
       "english"))
  )
 
+(defn get-session-obj
+  "Gets active session object"
+  [request]
+  (let [cookies (:cookie request)
+        long-session-uuid (get-cookie
+                            cookies
+                            :long-session)
+        long-session-obj (when long-session-uuid
+                           (mon/mongodb-find-one
+                             long-session-cname
+                             {:uuid long-session-uuid}))
+        session-uuid (get-cookie
+                       cookies
+                       :session)
+        session-obj (when session-uuid
+                      (mon/mongodb-find-one
+                        session-cname
+                        {:uuid session-uuid}))
+        session-obj (or long-session-obj
+                        session-obj
+                        nil)]
+    session-obj))
+
+(defn get-preferences
+  "Fetch preferences for logged in user"
+  [request]
+  (let [session-obj (get-session-obj
+                      request)]
+    (when session-obj
+      (mon/mongodb-find-one
+        preferences-cname
+        {:user-id (:user-id session-obj)})
+     ))
+ )
+
 (defn am-i-logged-in
  "Check if user is logged in"
  [request]
- (let [cookies (:cookie request)
-       long-session-uuid (get-cookie
-                           cookies
-                           :long-session)
-       long-session-obj (when long-session-uuid
-                          (mon/mongodb-find-one
-                            long-session-cname
-                            {:uuid long-session-uuid}))
-       session-uuid (get-cookie
-                      cookies
-                      :session)
-       session-obj (when session-uuid
-                     (mon/mongodb-find-one
-                       session-cname
-                       {:uuid session-uuid}))
-       session-obj (or long-session-obj
-                       session-obj
-                       nil)
+ (let [session-obj (get-session-obj
+                     request)
        accepted-language (get-accept-language
                            request)
        accepted-language-name (cstring/capitalize
@@ -816,9 +835,8 @@
                                    @response
                                    [:headers
                                     (rsh/set-cookie)])]
-          (when (and set-cookies-header
-                     (vector?
-                       set-cookies-header))
+          (when (vector?
+                  set-cookies-header)
             (reset!
               response
               (update-in
@@ -837,13 +855,12 @@
                 (rsh/set-visible-cookie)
                 visible-cookie-value))
            )
-          (when (and set-cookies-header
-                     (and (string?
-                            set-cookies-header)
-                          (not
-                            (cstring/blank?
-                              set-cookies-header))
-                      ))
+          (when (and (string?
+                       set-cookies-header)
+                     (not
+                       (cstring/blank?
+                         set-cookies-header))
+                 )
             (reset!
               response
               (update-in
@@ -857,15 +874,8 @@
                 (rsh/set-visible-cookie)
                 visible-cookie-value))
            )
-          (when (and set-cookies-header
-                     (not
-                       (and (string?
-                              set-cookies-header)
-                            (not
-                              (cstring/blank?
-                                set-cookies-header))
-                        ))
-                 )
+          (when (nil?
+                  set-cookies-header)
             (reset!
               response
               (update-in
@@ -879,7 +889,17 @@
                 visible-cookie-value))
            )
           (when (not
-                  set-cookies-header)
+                  (or (and (string?
+                             set-cookies-header)
+                           (not
+                             (cstring/blank?
+                               set-cookies-header))
+                       )
+                      (vector?
+                        set-cookies-header)
+                      (nil?
+                        set-cookies-header))
+                 )
             (reset!
               response
               (update-in

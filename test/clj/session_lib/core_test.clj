@@ -21,7 +21,53 @@
   []
   (mongodb-connect
     db-uri
-    db-name))
+    db-name)
+  (mongodb-insert-many
+    "user"
+    [{ :username "test-user"
+	      :email "234@234" }])
+	 (let [user-db-obj (mongodb-find-one
+	                     "user"
+	                     {:username "test-user"})
+	       _id (:_id user-db-obj)]
+	   (mongodb-insert-many
+      "session"
+      [{:uuid "test-uuid"
+        :user-agent "Test browser"
+        :user-id _id
+        :username "admin"
+        :created-at (java.util.Date.)}
+       {:uuid "4321-uuid"
+        :user-agent "Test browser"
+        :user-id _id
+        :username "admin"
+        :created-at (java.util.Date.)}
+       {:uuid "1234-uuid"
+        :user-agent "Test browser"
+        :user-id _id
+        :username "admin"
+        :created-at (java.util.Date.)}
+       ])
+	   (mongodb-insert-many
+      "long-session"
+      [{:uuid "4321-uuid"
+        :user-agent "Test browser"
+        :user-id _id
+        :username "admin"
+        :created-at (java.util.Date.)}
+       {:uuid "1234-uuid"
+        :user-agent "Test browser"
+        :user-id _id
+        :username "admin"
+        :created-at (java.util.Date.)}
+       ])
+    (mongodb-insert-many
+      "preferences"
+      [{:user-id _id
+        :language "serbian"
+        :language-name "Serbian"}
+       ])
+   ))
 
 (defn destroy-db
   "Destroy testing database"
@@ -39,9 +85,7 @@
 
 (use-fixtures :each before-and-after-tests)
 
-
 (deftest test-session-timeout
-  
   (testing "Test session timeout"
     
     (let [result (session-timeout
@@ -72,12 +116,9 @@
       
      )
     
-   )
-  
- )
+   ))
 
 (deftest test-session-cookie-string
-  
   (testing "Test session cookie string"
     
     (let [cookie-name nil
@@ -613,7 +654,7 @@
     (let [cookie-name "session"
           user-id nil
           username nil
-          session-uuid "1234-uuid"
+          session-uuid "3-uuid"
           timeout-in-seconds 10
           user-agent nil
           is-secure-on true
@@ -630,7 +671,8 @@
                            is-httponly-on
                            is-persistent)
           result (mongodb-find-one
-                   cookie-name)]
+                   cookie-name
+                   {:uuid session-uuid})]
       
       (is
         (nil?
@@ -642,7 +684,7 @@
     (let [cookie-name "session"
           user-id "user-id"
           username nil
-          session-uuid "1234-uuid"
+          session-uuid "2-uuid"
           timeout-in-seconds 10
           user-agent nil
           is-secure-on true
@@ -659,7 +701,8 @@
                            is-httponly-on
                            is-persistent)
           result (mongodb-find-one
-                   cookie-name)]
+                   cookie-name
+                   {:uuid session-uuid})]
       
       (is
         (nil?
@@ -671,7 +714,7 @@
     (let [cookie-name "session"
           user-id "user-id"
           username "username"
-          session-uuid "1234-uuid"
+          session-uuid "1-uuid"
           timeout-in-seconds 10
           user-agent nil
           is-secure-on true
@@ -688,7 +731,8 @@
                            is-httponly-on
                            is-persistent)
           result (mongodb-find-one
-                   cookie-name)]
+                   cookie-name
+                   {:uuid session-uuid})]
       
       (is
         (nil?
@@ -700,7 +744,7 @@
     (let [cookie-name "session"
           user-id "user-id"
           username "username"
-          session-uuid "1234-uuid"
+          session-uuid "5-uuid"
           timeout-in-seconds 10
           user-agent "user-agent"
           is-secure-on true
@@ -717,7 +761,8 @@
                            is-httponly-on
                            is-persistent)
           result (mongodb-find-one
-                   cookie-name)]
+                   cookie-name
+                   {:uuid session-uuid})]
       
       (is
         (not
@@ -783,17 +828,14 @@
               (.getTime
                 (:created-at result))
             )
-           1000)
+           5000)
        )
       
      )
     
-   )
-  
- )
+   ))
 
 (deftest test-get-cookie
-  
   (testing "Test get cookie"
     
     (let [cookies nil
@@ -874,12 +916,9 @@
       
      )
     
-   )
-  
- )
+   ))
 
 (deftest test-get-accept-language
-  
   (testing "Test get accept language"
     
     (let [request nil
@@ -926,12 +965,93 @@
       
      )
     
-   )
-  
- )
+   ))
+
+(deftest test-get-session-obj
+  (testing "Test get session obj"
+    
+    (let [request nil
+          result (get-session-obj
+                   request)]
+      
+      (is
+        (nil?
+          result)
+       )
+      
+     )
+    
+    (let [request {:cookie "session=1234-uuid"}
+          result (get-session-obj
+                   request)]
+      
+      (is
+        (not
+          (nil?
+            result))
+       )
+      
+     )
+    
+    (let [request {:cookie "long-session=1234-uuid"}
+          result (get-session-obj
+                   request)]
+      
+      (is
+        (not
+          (nil?
+            result))
+       )
+      
+     )
+    
+   ))
+
+(deftest test-get-preferences
+  (testing "Test get preferences"
+    
+    (let [request nil
+          result (get-preferences
+                   request)]
+      
+      (is
+        (nil?
+          result)
+       )
+      
+     )
+    
+    (let [request {:cookie "session=test-uuid"}
+          result (get-preferences
+                   request)]
+      
+      (let [user-db-obj (mongodb-find-one
+	                         "user"
+	                         {:username "test-user"})
+	           _id (:_id user-db-obj)]
+	       
+	       (is
+          (= (:user-id result)
+             _id)
+         )
+	       
+	       (is
+          (= (:language result)
+             "serbian")
+         )
+	       
+	       (is
+          (= (:language-name result)
+             "Serbian")
+         )
+         
+       )
+      
+     )
+    
+   ))
 
 (deftest test-am-i-logged-in
-  
   (testing "Test am i logged in"
     
     (let [request nil
@@ -958,7 +1078,7 @@
       
      )
     
-    (let [request {:cookie "session=1234-uuid; session-visible=exists"
+    (let [request {:cookie "session=6-uuid; session-visible=exists"
                    :accept-language "sr,en;q=0.5"}
           result (am-i-logged-in
                    request)]
@@ -985,7 +1105,7 @@
     
     (let [cookie-name "session"
           user-id "user-id"
-          username "username"
+          username "admin"
           session-uuid "1234-uuid"
           timeout-in-seconds 10
           user-agent "user-agent"
@@ -1033,7 +1153,7 @@
              result
              [:body
               :username])
-           "username")
+           "admin")
        )
       
       (is
@@ -1056,7 +1176,7 @@
     
     (let [cookie-name "long-session"
           user-id "user-id"
-          username "username"
+          username "admin"
           session-uuid "1234-uuid"
           timeout-in-seconds 10
           user-agent "user-agent"
@@ -1104,7 +1224,7 @@
              result
              [:body
               :username])
-           "username")
+           "admin")
        )
       
       (is
@@ -1125,12 +1245,9 @@
       
      )
     
-   )
-  
- )
+   ))
 
 (deftest test-am-i-logged-in-fn
-  
   (testing "Test am i logged in fn"
     
     (let [request nil
@@ -1154,6 +1271,10 @@
        )
       
      )
+    
+    (mongodb-delete-one
+      "session"
+      {:uuid "1234-uuid"})
     
     (let [request {:cookie "session=1234-uuid; session-visible=exists"}
           result (am-i-logged-in-fn
@@ -1196,7 +1317,7 @@
       
      )
     
-    (let [request {:cookie "long-session=1234-uuid; long-session-visible=exists"}
+    (let [request {:cookie "long-session=1-uuid; long-session-visible=exists"}
           result (am-i-logged-in-fn
                    request)]
       
@@ -1237,12 +1358,9 @@
       
      )
     
-   )
-  
- )
+   ))
 
 (deftest test-refresh-session
-  
   (testing "Test refresh session"
     
     (let [request nil
@@ -1425,12 +1543,9 @@
       
      )
     
-   )
-  
- )
+   ))
 
 (deftest test-session-cookie-string-fn
-  
   (testing "Test session cookie string fn"
     
     (let [remember-me nil
@@ -1659,12 +1774,9 @@
       
      )
     
-   )
-  
- )
+   ))
 
 (deftest test-delete-session-record
-  
   (testing "Test delete session record"
     
     (let [request nil
@@ -1896,12 +2008,9 @@
       
      )
     
-   )
-  
- )
+   ))
 
 (deftest test-create-indexes
-  
   (testing "Test create indexes"
     
     (create-indexes)
@@ -1942,12 +2051,9 @@
         "long-session-uuid-unique-idx")
      )
     
-   )
-  
- )
+   ))
 
 (deftest test-get-pass-for-email-username
-  
   (testing "Test get pass for email username"
     
     (let [email-username nil
@@ -2001,7 +2107,7 @@
       
      )
     
-    (let [email-username "test-user"
+    (let [email-username "test-user-1"
           password ""
           accept-language nil
           result (get-pass-for-email-username
@@ -2018,7 +2124,7 @@
       
      )
     
-    (let [email-username "test-user"
+    (let [email-username "test-user-1"
           password "test-password"
           accept-language nil
           result (get-pass-for-email-username
@@ -2037,11 +2143,11 @@
     
     (mongodb-insert-one
       "user"
-      {:username "test-user"
+      {:username "test-user-1"
        :email "test@email.com"
        :password "test-password-1"})
     
-    (let [email-username "test-user"
+    (let [email-username "test-user-1"
           password "test-password"
           accept-language nil
           result (get-pass-for-email-username
@@ -2058,7 +2164,7 @@
       
      )
     
-    (let [email-username "test-user"
+    (let [email-username "test-user-1"
           password "test-password-1"
           accept-language nil
           [result-status
@@ -2074,14 +2180,14 @@
            {:status "success"
             :email "success"
             :password "success"
-            :username "test-user"
+            :username "test-user-1"
             :language "english"
             :language-name "English"})
        )
       
       (is
         (= result-username
-           "test-user")
+           "test-user-1")
        )
       
       (is
@@ -2129,14 +2235,14 @@
            {:status "success"
             :email "success"
             :password "success"
-            :username "test-user"
+            :username "test-user-1"
             :language "english"
             :language-name "English"})
        )
       
       (is
         (= result-username
-           "test-user")
+           "test-user-1")
        )
       
       (is
@@ -2151,12 +2257,9 @@
       
      )
     
-   )
-  
- )
+   ))
 
 (deftest test-login-authentication
-  
   (testing "Test login authentication"
     
     (let [request nil
@@ -2245,12 +2348,12 @@
     
     (mongodb-insert-one
       "user"
-      {:username "test-user"
+      {:username "test-user-1"
        :email "test@email.com"
        :password "test-password-1"})
     
     (let [request {:user-agent "user-agent"
-                   :body {:email "test-user"
+                   :body {:email "test-user-1"
                           :password "test-password"}}
           result (login-authentication
                    request)]
@@ -2267,7 +2370,7 @@
      )
     
     (let [request {:user-agent "user-agent"
-                   :body {:email "test-user"
+                   :body {:email "test-user-1"
                           :password "test-password-1"}}
           {status :status
            {content-type (eh/content-type)
@@ -2378,7 +2481,7 @@
       
       (is
         (= result-username
-           "test-user")
+           "test-user-1")
        )
       
       (is
@@ -2394,7 +2497,7 @@
      )
     
     (let [request {:user-agent "user-agent"
-                   :body {:email "test-user"
+                   :body {:email "test-user-1"
                           :password "test-password-1"
                           :remember-me true}}
           {status :status
@@ -2506,7 +2609,7 @@
       
       (is
         (= result-username
-           "test-user")
+           "test-user-1")
        )
       
       (is
@@ -2523,7 +2626,7 @@
     
     (let [request {:user-agent "user-agent"
                    :accept-language "sr,en;q=0.5"
-                   :body {:email "test-user"
+                   :body {:email "test-user-1"
                           :password "test-password-1"
                           :remember-me true}}
           {status :status
@@ -2635,7 +2738,7 @@
       
       (is
         (= result-username
-           "test-user")
+           "test-user-1")
        )
       
       (is
@@ -2650,12 +2753,9 @@
       
      )
     
-   )
-  
- )
+   ))
 
 (deftest test-logout
-  
   (testing "Test logout"
     
     (let [request nil
@@ -2697,7 +2797,7 @@
       
      )
     
-    (let [request {:cookie "session=1234-uuid; session-visible=exists"}
+    (let [request {:cookie "session=4321-uuid; session-visible=exists"}
           {status :status
            {content-type (eh/content-type)
             [cookie1
@@ -2792,7 +2892,7 @@
       
      )
     
-    (let [request {:cookie "long-session=1234-uuid; long-session-visible=exists"}
+    (let [request {:cookie "long-session=4321-uuid; long-session-visible=exists"}
           {status :status
            {content-type (eh/content-type)
             [cookie1
@@ -2887,12 +2987,9 @@
       
      )
     
-   )
-  
- )
+   ))
 
 (deftest test-set-session-cookies
-  
   (testing "Test set session cookies"
     
     (let [request nil
@@ -3500,7 +3597,5 @@
       
      )
     
-   )
-  
- )
+   ))
 
