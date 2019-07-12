@@ -303,7 +303,8 @@
 (defn refresh-session
   "Refreash existing session uuid for long or short session timeout"
   [{cookie :cookie
-    user-agent :user-agent}]
+    user-agent :user-agent
+    is-https-custom-header :is-https-custom-header}]
   (when (and cookie
              (string?
                cookie)
@@ -342,7 +343,7 @@
              long-session-uuid
              long-session-timeout-num
              user-agent
-             true
+             is-https-custom-header
              true
              true)
            (session-cookie-string
@@ -365,7 +366,7 @@
              session-uuid
              session-timeout-num
              user-agent
-             true
+             is-https-custom-header
              true
              true)
            (session-cookie-string
@@ -386,7 +387,8 @@
   [remember-me
    user
    uuid
-   user-agent]
+   user-agent
+   is-https-custom-header]
   (when (and user
              (map?
                user)
@@ -410,7 +412,7 @@
          uuid
          long-session-timeout-num
          user-agent
-         true
+         is-https-custom-header
          true
          true)
        (session-cookie-string
@@ -427,7 +429,7 @@
          uuid
          session-timeout-num
          user-agent
-         true
+         is-https-custom-header
          true
          true)
        (session-cookie-string
@@ -441,7 +443,8 @@
 
 (defn delete-session-record
   "Delete session record from database"
-  [{cookies :cookie}]
+  [{cookies :cookie
+    is-https-custom-header :is-https-custom-header}]
   (if (and cookies
            (string?
              cookies)
@@ -475,7 +478,7 @@
                                "destroyed"
                                0
                                nil
-                               true
+                               is-https-custom-header
                                true)
               destroy-visible-cookie (session-cookie-string
                                        (str
@@ -516,7 +519,7 @@
                                "destroyed"
                                0
                                nil
-                               true
+                               is-https-custom-header
                                true)
               destroy-visible-cookie (session-cookie-string
                                        (str
@@ -726,6 +729,7 @@
   "Login authentication"
   [{user-agent :user-agent
     accept-language :accept-language
+    is-https-custom-header :is-https-custom-header
     {email-username :email
      password :password
      remember-me :remember-me} :body}]
@@ -766,7 +770,8 @@
                                            remember-me
                                            user
                                            uuid
-                                           user-agent)]
+                                           user-agent
+                                           is-https-custom-header)]
             (if session-cookie
               (swap!
                 headers
